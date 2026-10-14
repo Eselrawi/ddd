@@ -7,6 +7,7 @@ Agenda semanal rápida: escribes en una frase lo que tienes que hacer y la app e
 - Desliza **→** para marcar hecha y **←** para pasarla a mañana (o pulsa *Mañana ⏭*)
 - Las tareas sin hacer de días anteriores aparecen arriba en *Hoy*, con el botón **Todo a hoy**
 - Vista de día y de semana, un color por día, modo oscuro automático y deshacer
+- Avisos 🔔 (Android): resumen por la mañana, pendientes por la noche y plan de mañana, con horas ajustables
 - Todo se guarda en el propio móvil y funciona sin internet
 
 ## Android

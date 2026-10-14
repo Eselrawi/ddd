@@ -24,6 +24,7 @@
         </div>
         <div class="top-actions">
           <button class="pill" id="todayBtn" aria-label="Ir a hoy">Hoy</button>
+          <button class="icon-btn" id="bellBtn" aria-label="Avisos" hidden>🔔</button>
           <button class="icon-btn" id="viewToggle" aria-label="Cambiar vista">▦</button>
         </div>
       </div>
@@ -79,6 +80,20 @@
     <div class="sheet-actions">
       <button class="btn danger" id="deleteBtn">🗑 Borrar</button>
       <button class="btn primary" id="saveBtn">Guardar</button>
+    </div>
+  </div>
+
+  <!-- Hoja de ajustes de avisos -->
+  <div class="sheet-backdrop" id="notifBackdrop" hidden></div>
+  <div class="sheet" id="notifSheet" role="dialog" aria-modal="true" aria-labelledby="notifTitle" hidden>
+    <div class="sheet-grip"></div>
+    <h2 class="sheet-title" id="notifTitle">🔔 Avisos</h2>
+    <p class="sheet-sub">Notificaciones suaves para no olvidarte de nada.</p>
+    <div class="notif-list" id="notifList"></div>
+    <p class="notif-warn" id="notifWarn" hidden>Las notificaciones están bloqueadas. Actívalas en Ajustes del móvil → Apps → Mi Semana → Notificaciones.</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="notifTest">Probar aviso</button>
+      <button class="btn primary" id="notifDone">Listo</button>
     </div>
   </div>
 

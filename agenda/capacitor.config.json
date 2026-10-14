@@ -7,6 +7,10 @@
       "insetsHandling": "css",
       "initialViewportFitValueHint": "cover",
       "style": "DARK"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#5B5BF0"
     }
   }
 }

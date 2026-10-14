@@ -41,6 +41,11 @@ jobs:
             --iconBackgroundColor '#5B5BF0' --iconBackgroundColorDark '#5B5BF0' \
             --splashBackgroundColor '#5B5BF0' --splashBackgroundColorDark '#0F1018'
           npx cap sync android
+          # Icono de notificación
+          for d in assets/notification/drawable-*; do
+            mkdir -p "android/app/src/main/res/$(basename "$d")"
+            cp "$d"/*.png "android/app/src/main/res/$(basename "$d")/"
+          done
 
       - name: Versión
         run: |

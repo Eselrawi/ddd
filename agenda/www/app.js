@@ -210,6 +210,7 @@
   // ---------- Render ----------
   function render() {
     save();
+    scheduleSoon();
     setAccent(DAY_COLORS[weekday(selected)]);
     const sd = toDate(selected);
     $('monthLabel').textContent = `${MONTHS[sd.getMonth()]} ${sd.getFullYear()}`;
@@ -590,16 +591,170 @@
       if (selected === today) selected = now;
       today = now;
       render();
+    } else {
+      scheduleSoon();
     }
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
   setInterval(checkNewDay, 60000);
 
+  // ---------- Avisos (notificaciones locales) ----------
+  const LN = window.Capacitor?.Plugins?.LocalNotifications;
+  const SETTINGS_KEY = 'misemana.notif.v1';
+  const NOTIF_TYPES = [
+    { key: 'morning', ico: '☀️', title: 'Resumen por la mañana', desc: 'Lo que tienes hoy, nada más despertar', time: '09:00' },
+    { key: 'evening', ico: '🌙', title: 'Pendientes por la noche', desc: 'Lo que te queda sin hacer, para pasarlo a mañana', time: '21:00' },
+    { key: 'plan', ico: '📋', title: 'Plan de mañana', desc: 'Lo que tienes al día siguiente', time: '21:30' },
+  ];
+  const DAYS_AHEAD = 14;
+  let notif = loadNotif();
+  let scheduleTimer = null;
+
+  function loadNotif() {
+    const def = Object.fromEntries(NOTIF_TYPES.map((t) => [t.key, { on: true, time: t.time }]));
+    try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) }; } catch { return def; }
+  }
+  function saveNotif() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(notif)); } catch { /* ignorar */ }
+  }
+
+  const listText = (list) => {
+    const names = list.slice(0, 4).map((t) => `${t.emoji || emojiFor(t.text)} ${t.time ? t.time + ' ' : ''}${t.text}`);
+    if (list.length > 4) names.push(`… y ${list.length - 4} más`);
+    return names.join('\n');
+  };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const at = (day, hhmm) => { const d = toDate(day); const [h, m] = hhmm.split(':').map(Number); d.setHours(h, m, 0, 0); return d; };
+
+  // Construye todos los avisos de los próximos días a partir de las tareas actuales
+  function buildNotifications() {
+    const out = [];
+    const now = new Date();
+    const now0 = todayStr();
+    for (let i = 0; i < DAYS_AHEAD; i++) {
+      const day = addDays(now0, i);
+      const pending = tasks.filter((t) => !t.done && t.date === day).sort(sortTasks);
+      const overdue = i === 0 ? tasks.filter((t) => !t.done && t.date < day) : [];
+      const tomorrow = tasks.filter((t) => !t.done && t.date === addDays(day, 1)).sort(sortTasks);
+      const push = (kind, base, title, body) => {
+        const when = at(day, notif[kind].time);
+        if (!notif[kind].on || when <= now) return;
+        out.push({ id: base + i, title, body, schedule: { at: when, allowWhileIdle: true }, channelId: 'avisos', extra: { date: kind === 'plan' ? addDays(day, 1) : day } });
+      };
+      const todayAll = [...overdue, ...pending];
+      if (todayAll.length) {
+        push('morning', 1000, `☀️ Buenos días · ${plural(pending.length, 'tarea', 'tareas')} hoy`
+          + (overdue.length ? ` (+${overdue.length} atrasada${overdue.length > 1 ? 's' : ''})` : ''), listText(todayAll));
+      }
+      if (pending.length) {
+        push('evening', 2000, `🌙 Te ${pending.length === 1 ? 'queda 1 tarea' : 'quedan ' + pending.length + ' tareas'} por hacer`,
+          `${listText(pending)}\nToca para hacerlas o pasarlas a mañana ⏭`);
+      }
+      if (tomorrow.length) {
+        push('plan', 3000, `📋 Mañana tienes ${plural(tomorrow.length, 'tarea', 'tareas')}`, listText(tomorrow));
+      }
+    }
+    return out;
+  }
+
+  async function reschedule() {
+    if (!LN) return;
+    try {
+      const perm = await LN.checkPermissions();
+      if (perm.display !== 'granted') return;
+      const pending = await LN.getPending();
+      if (pending.notifications.length) await LN.cancel({ notifications: pending.notifications.map((n) => ({ id: n.id })) });
+      const list = buildNotifications();
+      if (list.length) await LN.schedule({ notifications: list });
+    } catch (e) { console.warn('avisos', e); }
+  }
+  function scheduleSoon() {
+    if (!LN) return;
+    clearTimeout(scheduleTimer);
+    scheduleTimer = setTimeout(reschedule, 800);
+  }
+
+  async function ensurePermission() {
+    if (!LN) return false;
+    try {
+      let p = await LN.checkPermissions();
+      if (p.display === 'prompt' || p.display === 'prompt-with-rationale') p = await LN.requestPermissions();
+      return p.display === 'granted';
+    } catch { return false; }
+  }
+
+  async function renderNotifSheet() {
+    $('notifList').innerHTML = NOTIF_TYPES.map((t) => `
+      <div class="notif-row${notif[t.key].on ? '' : ' off'}">
+        <span class="ico">${t.ico}</span>
+        <div><strong>${t.title}</strong><small>${t.desc}</small></div>
+        <label class="switch"><input type="checkbox" id="nf-${t.key}" data-key="${t.key}" ${notif[t.key].on ? 'checked' : ''} aria-label="${t.title}"><i></i></label>
+        <input type="time" id="nt-${t.key}" data-key="${t.key}" value="${notif[t.key].time}" aria-label="Hora: ${t.title}">
+      </div>`).join('');
+    let blocked = false;
+    try { blocked = LN && (await LN.checkPermissions()).display === 'denied'; } catch { /* ignorar */ }
+    $('notifWarn').hidden = !blocked;
+  }
+  async function openNotif() {
+    await ensurePermission();
+    await renderNotifSheet();
+    $('toast').hidden = true;
+    $('notifBackdrop').hidden = false;
+    $('notifSheet').hidden = false;
+  }
+  function closeNotif() {
+    $('notifBackdrop').hidden = true;
+    $('notifSheet').hidden = true;
+    scheduleSoon();
+  }
+  $('notifList').addEventListener('change', (e) => {
+    const key = e.target.dataset.key;
+    if (!key) return;
+    if (e.target.type === 'checkbox') notif[key].on = e.target.checked;
+    else if (e.target.value) notif[key].time = e.target.value;
+    saveNotif();
+    e.target.closest('.notif-row').classList.toggle('off', !notif[key].on);
+    haptic();
+    scheduleSoon();
+  });
+  $('notifBackdrop').addEventListener('click', closeNotif);
+  $('notifDone').addEventListener('click', closeNotif);
+  $('notifTest').addEventListener('click', async () => {
+    if (!(await ensurePermission())) { $('notifWarn').hidden = false; return; }
+    const pend = tasks.filter((t) => !t.done && t.date === today).sort(sortTasks);
+    try {
+      await LN.schedule({ notifications: [{
+        id: 999, channelId: 'avisos',
+        title: `☀️ Así se verán tus avisos · ${plural(pend.length, 'tarea', 'tareas')} hoy`,
+        body: pend.length ? listText(pend) : 'Hoy no tienes nada pendiente 🌴',
+        schedule: { at: new Date(Date.now() + 3000), allowWhileIdle: true }, extra: { date: today },
+      }] });
+      toast('Te llegará en 3 segundos…', false);
+    } catch (e) { toast('No se pudo enviar el aviso', false); }
+  });
+
+  if (LN) {
+    $('bellBtn').hidden = false;
+    $('bellBtn').addEventListener('click', () => { haptic(); openNotif(); });
+    (async () => {
+      try {
+        await LN.createChannel({ id: 'avisos', name: 'Resúmenes y recordatorios', description: 'Resumen de la mañana, pendientes y plan de mañana', importance: 3, visibility: 1 });
+      } catch { /* versiones antiguas de Android */ }
+      // Al tocar un aviso, abre el día correspondiente
+      LN.addListener('localNotificationActionPerformed', (ev) => {
+        const d = ev?.notification?.extra?.date;
+        if (d) { selected = d; view = 'day'; render(); }
+      });
+      if (await ensurePermission()) reschedule();
+    })();
+  }
+
   // ---------- Integración nativa (Capacitor) ----------
   const App = window.Capacitor?.Plugins?.App;
   if (App?.addListener) {
     App.addListener('backButton', () => {
-      if (!$('sheet').hidden) closeSheet();
+      if (!$('notifSheet').hidden) closeNotif();
+      else if (!$('sheet').hidden) closeSheet();
       else if (view === 'week') { view = 'day'; render(); }
       else if (selected !== today) { selected = today; render(); }
       else App.exitApp();

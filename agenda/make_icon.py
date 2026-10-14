@@ -49,3 +49,19 @@ icon(1024, rounded=False).save(f"{out}/assets/icon-only.png")
 icon(1024, pad_ratio=0.08, rounded=False, background=False).save(f"{out}/assets/icon-foreground.png")
 Image.new("RGBA", (1024, 1024), (91, 91, 240, 255)).save(f"{out}/assets/icon-background.png")
 Image.new("RGBA", (2732, 2732), (91, 91, 240, 255)).save(f"{out}/assets/splash.png")
+
+# Icono pequeño de notificación (Android): silueta blanca sobre transparente
+def stat_icon(size):
+    S = 256
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle([28, 44, 228, 236], radius=30, outline=(255, 255, 255, 255), width=22)
+    d.rectangle([28, 44, 228, 96], fill=(255, 255, 255, 255))
+    for cx in (84, 172):
+        d.rounded_rectangle([cx - 12, 16, cx + 12, 70], radius=12, fill=(255, 255, 255, 255))
+    d.line([(78, 160), (114, 196), (182, 128)], fill=(255, 255, 255, 255), width=24, joint="curve")
+    return im.resize((size, size), Image.LANCZOS)
+
+for folder, px in {"mdpi": 24, "hdpi": 36, "xhdpi": 48, "xxhdpi": 72, "xxxhdpi": 96}.items():
+    os.makedirs(f"{out}/assets/notification/drawable-{folder}", exist_ok=True)
+    stat_icon(px).save(f"{out}/assets/notification/drawable-{folder}/ic_stat_icon.png")
